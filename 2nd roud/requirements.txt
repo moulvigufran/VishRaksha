@@ -1,0 +1,4 @@
+# Core demo needs only the Python standard library.
+pytest>=8
+# Optional, for --llm mode:
+anthropic

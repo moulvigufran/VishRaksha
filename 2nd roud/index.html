@@ -1,0 +1,815 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+</head>
+<body>
+<title>VishRaksha Agent</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: control-room screen. Header with tabs; Live case = controls + phones on the left, district map and agent trace on the right. */
+:root {
+  --bg: #F2F4EF; --surface: #FFFFFF; --ink: #15241C; --muted: #56675C; --line: #D6DDD3;
+  --accent: #A85A06; --accent-soft: #FBEBD6; --go: #1D7548; --go-soft: #DDF1E5;
+  --stop: #B3261E; --stop-soft: #F9E0DD; --info: #2B5794; --info-soft: #E1EAF6; --wait: #7A5C00; --wait-soft: #FFF3C4;
+  --map-bg: #E9EEE5; --road: #C7D0C3;
+  --f-display: "Archivo", "Arial Narrow", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #0E1611; --surface: #16211A; --ink: #E4ECE5; --muted: #9AAD9F; --line: #2A3A2F;
+  --accent: #F2A64A; --accent-soft: #3A2A12; --go: #4CC38A; --go-soft: #143524;
+  --stop: #F27A70; --stop-soft: #3D1A17; --info: #86AEE6; --info-soft: #172A44; --wait: #F1D06B; --wait-soft: #3A3210;
+  --map-bg: #132019; --road: #2B3B31; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #0E1611; --surface: #16211A; --ink: #E4ECE5; --muted: #9AAD9F; --line: #2A3A2F;
+  --accent: #F2A64A; --accent-soft: #3A2A12; --go: #4CC38A; --go-soft: #143524;
+  --stop: #F27A70; --stop-soft: #3D1A17; --info: #86AEE6; --info-soft: #172A44; --wait: #F1D06B; --wait-soft: #3A3210;
+  --map-bg: #132019; --road: #2B3B31; color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1280px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 18px 48px; display: grid; gap: 18px; }
+header.top { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: end; justify-content: space-between; }
+.brand h1 { font-family: var(--f-display); font-weight: 800; font-size: clamp(26px, 4vw, 36px); margin: 0; letter-spacing: -0.01em; }
+.brand h1 span { color: var(--accent); }
+.brand p { margin: 2px 0 0; color: var(--muted); max-width: 62ch; text-wrap: balance; }
+nav.tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+nav.tabs button { font: 600 14px var(--f-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink); padding: 8px 14px; border-radius: 8px; cursor: pointer; }
+nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.panel h2 { font-family: var(--f-display); font-weight: 600; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.grid-live { display: grid; grid-template-columns: minmax(0, 360px) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .grid-live { grid-template-columns: minmax(0, 1fr); } }
+.stack { display: grid; gap: 14px; min-width: 0; }
+label.f { display: grid; gap: 4px; font-size: 13px; color: var(--muted); font-weight: 600; }
+select, textarea, input[type=number] { font: 14px var(--f-body); color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px; width: 100%; }
+textarea { font-family: var(--f-mono); font-size: 13px; min-height: 74px; resize: vertical; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 700 14px var(--f-body); border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; background: var(--accent); color: var(--surface); }
+.btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+.btn.go { background: var(--go); color: var(--surface); }
+.btn.stop { background: var(--stop); color: var(--surface); }
+.btn[disabled] { opacity: .5; cursor: default; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: 600 13px var(--f-body); border: 0; background: transparent; color: var(--muted); padding: 7px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--info-soft); color: var(--info); }
+.hint { font-size: 12.5px; color: var(--muted); margin: 0; }
+.phones { display: grid; gap: 8px; }
+.phone { border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px; display: grid; gap: 4px; background: var(--surface); }
+.phone .t { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.phone b { font-size: 14px; }
+.phone .meta { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font: 600 11px var(--f-mono); padding: 2px 7px; border-radius: 99px; letter-spacing: .02em; white-space: nowrap; background: var(--bg); color: var(--muted); border: 1px solid var(--line); }
+.chip.ring { background: var(--wait-soft); color: var(--wait); border-color: transparent; }
+.chip.ok { background: var(--go-soft); color: var(--go); border-color: transparent; }
+.chip.no { background: var(--stop-soft); color: var(--stop); border-color: transparent; }
+.chip.info { background: var(--info-soft); color: var(--info); border-color: transparent; }
+.phone .act { display: flex; gap: 6px; }
+.phone .act button { flex: 1; font: 700 13px var(--f-body); border-radius: 7px; border: 0; padding: 7px; cursor: pointer; }
+.phone .act .p1 { background: var(--go); color: var(--surface); }
+.phone .act .p2 { background: var(--stop); color: var(--surface); }
+.timerbar { height: 3px; background: var(--line); border-radius: 2px; overflow: hidden; }
+.timerbar i { display: block; height: 100%; background: var(--wait); width: 0; }
+.mapbox { position: relative; }
+.mapbox svg { width: 100%; height: auto; display: block; background: var(--map-bg); border-radius: 10px; max-width: 100%; }
+.map-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.map-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.clock { font: 600 13px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; }
+.trace { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; max-height: 420px; overflow-y: auto; font-size: 13.5px; }
+.trace li { display: grid; grid-template-columns: 52px 92px minmax(0, 1fr); gap: 8px; padding: 5px 6px; border-radius: 6px; align-items: start; }
+.trace li:nth-child(odd) { background: var(--bg); }
+.trace .tm { font: 12px var(--f-mono); color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 2px; }
+.trace .k { font: 700 10.5px var(--f-mono); letter-spacing: .05em; padding: 3px 6px; border-radius: 4px; text-align: center; }
+.trace .txt { min-width: 0; overflow-wrap: anywhere; }
+.trace code { font: 12.5px var(--f-mono); color: var(--info); }
+.k-INPUT { background: var(--bg); color: var(--ink); border: 1px solid var(--line); }
+.k-UNDERSTAND { background: var(--info-soft); color: var(--info); }
+.k-PLAN { background: var(--accent-soft); color: var(--accent); }
+.k-TOOL { background: var(--info-soft); color: var(--info); }
+.k-DECISION { background: var(--wait-soft); color: var(--wait); }
+.k-ACTION { background: var(--go-soft); color: var(--go); }
+.k-VERIFY { background: var(--go); color: var(--surface); }
+.k-ESCALATE { background: var(--stop-soft); color: var(--stop); }
+@media (max-width: 560px) { .trace li { grid-template-columns: 44px minmax(0, 1fr); } .trace .k { grid-column: 2; justify-self: start; } .trace .txt { grid-column: 2; } .trace .tm { grid-row: 1 / span 2; } }
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 700px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.tile { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface); }
+.tile .v { font: 800 26px var(--f-display); font-variant-numeric: tabular-nums; }
+.tile .l { font-size: 12px; color: var(--muted); }
+.banner { border-radius: 10px; padding: 10px 14px; background: var(--info-soft); color: var(--ink); font-size: 14px; }
+.banner b { color: var(--info); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@media (max-width: 900px) { .two { grid-template-columns: minmax(0, 1fr); } }
+table.t { width: 100%; border-collapse: collapse; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+table.t th { text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; border-bottom: 1px solid var(--line); padding: 6px; }
+table.t td { border-bottom: 1px solid var(--line); padding: 7px 6px; vertical-align: top; }
+.scroll-x { overflow-x: auto; }
+.check { display: grid; gap: 8px; }
+.ck { border: 1px solid var(--line); border-radius: 10px; padding: 10px; display: grid; gap: 6px; }
+.ck .h { display: flex; justify-content: space-between; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ck .h b { font-size: 14px; }
+.note { border-left: 3px solid var(--accent); padding: 8px 12px; background: var(--accent-soft); border-radius: 0 8px 8px 0; font-size: 13.5px; }
+.handover { font: 12.5px/1.5 var(--f-mono); white-space: pre-wrap; background: var(--bg); border: 1px dashed var(--line); border-radius: 8px; padding: 10px; }
+.bars { display: grid; gap: 14px; }
+.bar-row { display: grid; gap: 6px; }
+.bar-row .lab { display: flex; justify-content: space-between; font-size: 14px; gap: 8px; }
+.bar { display: grid; grid-template-columns: 110px minmax(0, 1fr) 54px; gap: 8px; align-items: center; font-size: 12.5px; color: var(--muted); }
+.bar .track { height: 14px; background: var(--bg); border-radius: 4px; overflow: hidden; border: 1px solid var(--line); }
+.bar .fill { height: 100%; }
+.bar .num { font: 600 13px var(--f-mono); color: var(--ink); text-align: right; font-variant-numeric: tabular-nums; }
+.arch { display: grid; gap: 10px; }
+.arch-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+.box { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg); font-size: 13px; }
+.box b { display: block; font-size: 14px; margin-bottom: 2px; }
+.box.brain { background: var(--accent-soft); border-color: var(--accent); }
+.down { text-align: center; color: var(--muted); font: 600 12px var(--f-mono); }
+ul.clean { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+footer { color: var(--muted); font-size: 12.5px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <h1>Vish<span>Raksha</span> Agent</h1>
+      <p>An AI agent that finds, calls and confirms a hospital with a doctor and antivenom, so a snakebite patient reaches the right place within 60 minutes.</p>
+    </div>
+    <nav class="tabs" role="tablist" aria-label="Demo sections">
+      <button role="tab" id="tab-live" aria-selected="true" data-tab="live">1. Live case</button>
+      <button role="tab" id="tab-bedside" aria-selected="false" data-tab="bedside">2. Bedside + Rescue</button>
+      <button role="tab" id="tab-stock" aria-selected="false" data-tab="stock">3. Stock agent</button>
+      <button role="tab" id="tab-impact" aria-selected="false" data-tab="impact">4. Impact</button>
+      <button role="tab" id="tab-how" aria-selected="false" data-tab="how">5. How it works</button>
+    </nav>
+  </header>
+
+  <!-- LIVE CASE -->
+  <section id="view-live" class="stack">
+    <div class="banner"><b>Try it:</b> pick a scenario and press <b>Start case</b>. Switch to <b>"I am the hospital"</b> to answer the calls yourself (press 1 or 2, or let the phone ring out) and watch the agent re-plan. Hospitals, phones and the ambulance are simulated; the agent logic is the real code.</div>
+    <div class="grid-live">
+      <div class="stack">
+        <div class="panel stack">
+          <h2>Incoming 108 call</h2>
+          <label class="f" for="scenario">Scenario
+            <select id="scenario"></select>
+          </label>
+          <label class="f" for="note">Call-taker's note (you can edit it)
+            <textarea id="note"></textarea>
+          </label>
+          <div class="row">
+            <span class="hint">Hospitals:</span>
+            <div class="seg" role="group" aria-label="Who answers the hospital calls">
+              <button id="mode-auto" aria-pressed="true">Auto (scripted)</button>
+              <button id="mode-manual" aria-pressed="false">I am the hospital</button>
+            </div>
+          </div>
+          <div class="row">
+            <button class="btn" id="start">Start case</button>
+            <button class="btn ghost" id="reset">Reset</button>
+            <span class="clock" id="clock">23:40</span>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Hospital duty phones</h2>
+          <div class="phones" id="phones"></div>
+        </div>
+      </div>
+      <div class="stack">
+        <div class="panel mapbox">
+          <h2>Demo district map</h2>
+          <svg id="map" viewBox="0 0 640 480" role="img" aria-label="Map of the demo district with villages, health centres and the ambulance"></svg>
+          <div class="map-legend">
+            <span><i style="background:var(--muted)"></i>Village</span>
+            <span><i style="background:var(--info)"></i>Health centre</span>
+            <span><i style="background:var(--wait)"></i>Being called</span>
+            <span><i style="background:var(--go)"></i>Confirmed ready</span>
+            <span><i style="background:var(--stop)"></i>Declined / skipped</span>
+          </div>
+        </div>
+        <div class="tiles" id="tiles">
+          <div class="tile"><div class="v" id="t-status">Idle</div><div class="l">Case status</div></div>
+          <div class="tile"><div class="v" id="t-dest">–</div><div class="l">Confirmed centre</div></div>
+          <div class="tile"><div class="v" id="t-lock">–</div><div class="l">Minutes to confirm</div></div>
+          <div class="tile"><div class="v" id="t-fail">0</div><div class="l">Failures handled</div></div>
+        </div>
+        <div class="panel">
+          <div class="row" style="justify-content:space-between"><h2 style="margin:0">Agent trace: input → plan → tool → decision → action → verify</h2><button class="btn ghost" id="copy-trace" style="padding:6px 10px;font-size:12px">Copy trace</button></div>
+          <ol class="trace" id="trace" style="margin-top:10px"></ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- BEDSIDE + RESCUE -->
+  <section id="view-bedside" class="stack" hidden>
+    <div class="banner"><b>At the centre:</b> Ramu reached CHC Tilda. The bedside tracker reminds the team of the checks in India's national snakebite protocol and records what the <b>doctor</b> sees. It never reads a test and never suggests a drug. If the doctor decides to refer, the same agent finds and confirms a ventilator bed.</div>
+    <div class="two">
+      <div class="panel stack">
+        <div class="row" style="justify-content:space-between"><h2 style="margin:0">Bedside tracker · CHC Tilda · Ramu, 34 M</h2><span class="clock" id="bed-clock">Since arrival: 0 h</span></div>
+        <div class="check" id="checklist"></div>
+        <div class="row"><button class="btn ghost" id="bed-advance">Advance 1 hour</button><span class="hint">Reminders go to the duty nurse on WhatsApp when a check is due.</span></div>
+        <div>
+          <h2>Single breath count, as entered by the doctor</h2>
+          <svg id="sbc-chart" viewBox="0 0 420 150" role="img" aria-label="Chart of single breath count entries"></svg>
+        </div>
+        <div class="note">The national protocol lists when to refer to a centre with a ventilator. VishRaksha shows that page. <b>The doctor decides.</b></div>
+        <div class="row"><button class="btn stop" id="refer">Doctor: refer to a ventilator centre</button></div>
+      </div>
+      <div class="panel stack">
+        <h2>Rescue agent trace</h2>
+        <ol class="trace" id="rescue-trace"><li><span class="tm">–</span><span class="k k-INPUT">WAITING</span><span class="txt">Runs when the doctor presses Refer.</span></li></ol>
+        <div id="handover-wrap" hidden>
+          <h2>Handover note sent to the receiving hospital</h2>
+          <div class="handover" id="handover"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- STOCK -->
+  <section id="view-stock" class="stack" hidden>
+    <div class="banner"><b>Every morning at 8 AM</b> the stock agent asks each centre how many antivenom vials it has, chases the ones that do not reply, and proposes moving vials before a stock-out. Moving stock needs a human's approval.</div>
+    <div class="two">
+      <div class="panel stack">
+        <div class="row" style="justify-content:space-between"><h2 style="margin:0">Antivenom stock table</h2><button class="btn" id="run-stock">Run 8 AM check-in</button></div>
+        <div class="scroll-x"><table class="t" id="stock-table"></table></div>
+        <div id="proposal"></div>
+      </div>
+      <div class="panel">
+        <h2>Stock agent trace</h2>
+        <ol class="trace" id="stock-trace"></ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- IMPACT -->
+  <section id="view-impact" class="stack" hidden>
+    <div class="two">
+      <div class="panel stack">
+        <h2>Simulation: 10,000 monsoon snakebites in one district</h2>
+        <div class="bars" id="bars"></div>
+        <p class="hint">Model: 22 PHCs, 6 CHCs, 1 District Hospital over 70 × 70 km. Today, the patient goes to the nearest centre and is referred on (20 min each time) if it has no antivenom or no doctor. With VishRaksha, the ambulance goes straight to the nearest centre that confirmed ready; 5% of "ready" answers are wrong on arrival. Code: simulation/simulate.py (seed 7). These are planning numbers, not field results.</p>
+      </div>
+      <div class="panel stack">
+        <h2>Why 108 alone is not enough</h2>
+        <ul class="clean">
+          <li>108 takes the patient to the nearest government centre. It cannot see whether that centre has antivenom tonight or a doctor on duty.</li>
+          <li>India has about 58,000 snakebite deaths a year (Million Death Study). Many patients reach a centre that cannot treat them and lose an hour in referral.</li>
+          <li>VishRaksha does not replace 108. 108 moves the patient; the agent picks and readies the centre and tells the driver where to go.</li>
+          <li>Nobody in the family opens an app. The trigger is the 108 call, and centres only need a phone that can take a call.</li>
+        </ul>
+        <h2>Pilot plan</h2>
+        <ul class="clean">
+          <li>One district, one monsoon (June to September), with the District Health Office.</li>
+          <li>One metric: minutes from the 108 call to arrival at a centre that gives antivenom.</li>
+          <li>Running cost estimate: about ₹1.5–2 per call minute for voice + WhatsApp; under ₹50,000 per district per monsoon.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- HOW -->
+  <section id="view-how" class="stack" hidden>
+    <div class="two">
+      <div class="panel arch">
+        <h2>System architecture</h2>
+        <div class="arch-row">
+          <div class="box"><b>Triggers</b>108 call-taker note · Doctor presses Refer · 8 AM schedule</div>
+        </div>
+        <div class="down">▼</div>
+        <div class="box brain"><b>Agent core (planner + memory)</b>Understands the note (Claude, with a rule-based fallback), makes a plan, calls tools, checks every result, re-plans on failure, escalates to a human.</div>
+        <div class="down">▼ tool calls</div>
+        <div class="arch-row">
+          <div class="box"><b>find_facilities</b>ABDM facility registry + stock table</div>
+          <div class="box"><b>get_eta</b>OSRM / maps API</div>
+          <div class="box"><b>ivr_call</b>Exotel / Twilio voice, press 1 / 2</div>
+          <div class="box"><b>send_whatsapp</b>WhatsApp Cloud API buttons</div>
+          <div class="box"><b>notify_ambulance</b>108 dispatch (state tie-up)</div>
+          <div class="box"><b>alert_human</b>Control room, District officer</div>
+        </div>
+        <div class="down">▼</div>
+        <div class="box"><b>Case log</b>Every step time-stamped. The same log is the audit trail and the monthly district report.</div>
+      </div>
+      <div class="panel stack">
+        <h2>Safety controls</h2>
+        <ul class="clean">
+          <li>No diagnosis and no treatment advice. The agent only routes and reminds; doctors decide.</li>
+          <li>Human-in-the-loop: unclear location goes to the control room; moving stock needs approval; every centre declining alerts the District officer.</li>
+          <li>Ambulance never waits for the agent. It leaves at once; the destination reaches it on the way.</li>
+          <li>Minimal data: no ID number, masked phone numbers, logs deleted after the case closes (DPDP Act 2023).</li>
+        </ul>
+        <h2>Known limitations</h2>
+        <ul class="clean">
+          <li>Real duty numbers and the 108 link need permission from the state; this demo simulates them.</li>
+          <li>Stock is only as fresh as the morning check-in, so every call re-confirms it.</li>
+          <li>Dialect speech can fail; keypad input and a human operator are the fallbacks.</li>
+        </ul>
+        <h2>Built with</h2>
+        <p class="hint" style="font-size:13.5px">Python agent core with typed tools and tests · Claude API for reading Hinglish call notes (structured JSON output) · HTML/JS demo (this page) running the same logic offline · simulation in Python.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>Team InnoVerse · Project Eclipse 2026, OPEN-X track · All hospitals, phone numbers and stock in this demo are simulated.</footer>
+</div>
+
+<script>
+(function () {
+"use strict";
+// ---------- data (same as vishraksha/data.py) ----------
+var MIN_VIALS = 10, TARGET = 60, FRESH_H = 24;
+var VILLAGES = [
+  { name: "Rampur", x: 8, y: 30, aliases: ["rampr", "raampur"] },
+  { name: "Khedi", x: 14, y: 8, aliases: ["kheri"] },
+  { name: "Tilda", x: 22, y: 22, aliases: ["tilla"] },
+  { name: "Sonpur", x: 30, y: 38, aliases: ["sonepur", "sonpura"] },
+  { name: "Amlidih", x: 38, y: 24, aliases: ["amlidi", "amli"] },
+  { name: "Bhatgaon", x: 44, y: 10, aliases: ["bhatgao", "bhatgav"] },
+  { name: "Kusumi", x: 52, y: 34, aliases: ["kusmi"] }
+];
+var FAC = [
+  { id: "phc_rampur", name: "PHC Rampur", kind: "PHC", x: 9, y: 27, vials: 0, doc: true, vent: false, age: 6 },
+  { id: "phc_khedi", name: "PHC Khedi", kind: "PHC", x: 13, y: 10, vials: 4, doc: true, vent: false, age: 5 },
+  { id: "chc_tilda", name: "CHC Tilda", kind: "CHC", x: 22, y: 20, vials: 18, doc: true, vent: false, age: 3 },
+  { id: "phc_sonpur", name: "PHC Sonpur", kind: "PHC", x: 31, y: 36, vials: 10, doc: true, vent: false, age: 30 },
+  { id: "chc_amlidih", name: "CHC Amlidih", kind: "CHC", x: 37, y: 26, vials: 12, doc: true, vent: false, age: 4 },
+  { id: "dh", name: "District Hospital", kind: "DH", x: 46, y: 18, vials: 40, doc: true, vent: true, age: 2 },
+  { id: "mc", name: "Govt Medical College", kind: "MC", x: 55, y: 40, vials: 60, doc: true, vent: true, age: 1, always: true }
+];
+function fac(id) { for (var i = 0; i < FAC.length; i++) if (FAC[i].id === id) return FAC[i]; }
+function vil(n) { for (var i = 0; i < VILLAGES.length; i++) if (VILLAGES[i].name === n) return VILLAGES[i]; }
+function eta(a, b) { var km = Math.hypot(b.x - a.x, b.y - a.y) * 1.35; return Math.max(3, Math.round(km / 35 * 60)); }
+
+var SCEN = {
+  normal: { title: "Normal night: nearest PHC has no antivenom", note: "Raat 11:40. Ramu, 34, saanp ne kaata, Rampur gaon, 20 min pehle. Caller 98xxxx4521",
+    calls: { chc_tilda: [["ready", 1.5]], phc_sonpur: [["ready", 2.0]] } },
+  first_fails: { title: "First choices fail: re-plan", note: "Snake bite, Rampur, 30 min ago, leg swelling. Caller 98xxxx7710",
+    calls: { chc_tilda: [["not_ready", 1.0]], phc_sonpur: [["no_answer"]], chc_amlidih: [["ready", 1.2]], dh: [["no_answer"]] } },
+  all_decline: { title: "Everyone declines: fallback + officer", note: "saanp kaata Rampur 15 min",
+    calls: { chc_tilda: [["not_ready", 1.0]], phc_sonpur: [["not_ready", 1.0]], chc_amlidih: [["not_ready", 1.0]], dh: [["not_ready", 1.0]] } },
+  messy_input: { title: "Messy note: village unclear", note: "sanp ne dans liya, rampr ke paas nala, 1 ghante pehle",
+    calls: { chc_tilda: [["ready", 1.0]] } },
+  api_down: { title: "Voice API down: retry, then WhatsApp", note: "Krait bite suspected, Rampur, 45 min ago",
+    calls: { chc_tilda: [["error"], ["error"]], phc_sonpur: [["not_ready", 1.5]] }, wa: { chc_tilda: ["ready", 2.5] } }
+};
+
+// ---------- helpers ----------
+var $ = function (id) { return document.getElementById(id); };
+function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+var MS_PER_MIN = 650;
+var liveTok = { alive: false };
+function sleepMin(m, tok) { return new Promise(function (res, rej) { setTimeout(function () { if (!tok.alive) rej("cancelled"); else res(); }, m * MS_PER_MIN); }); }
+function ratio(a, b) { // similarity like difflib, simple version
+  if (a === b) return 1;
+  var m = [], i, j; for (i = 0; i <= a.length; i++) { m[i] = [i]; } for (j = 0; j <= b.length; j++) m[0][j] = j;
+  for (i = 1; i <= a.length; i++) for (j = 1; j <= b.length; j++) m[i][j] = Math.min(m[i-1][j] + 1, m[i][j-1] + 1, m[i-1][j-1] + (a[i-1] === b[j-1] ? 0 : 1));
+  return 1 - m[a.length][b.length] / Math.max(a.length, b.length);
+}
+var SNAKE = ["snake", "saanp", "sanp", "saap", "naag", "krait", "cobra", "viper", "sarp", "kaata", "kata", "dans"];
+function parseNote(text) {
+  var t = text.toLowerCase(), words = t.match(/[a-z]+/g) || [];
+  var snake = SNAKE.some(function (w) { return t.indexOf(w) >= 0; });
+  var mins = null, m = t.match(/(\d+)\s*(min|minute|mins|minat)/), h = t.match(/(\d+)\s*(ghante|ghanta|hour|hr)/);
+  if (m) mins = +m[1]; if (h) mins = +h[1] * 60;
+  var best = null, score = 0;
+  VILLAGES.forEach(function (v) {
+    [v.name.toLowerCase()].concat(v.aliases).forEach(function (name, idx) {
+      words.forEach(function (w) { var s = ratio(w, name); if (!(idx === 0 && s === 1)) s *= 0.85; if (s > score) { score = s; best = v.name; } });
+    });
+  });
+  return { snake: snake, village: best, conf: Math.round(score * 100) / 100, mins: mins };
+}
+function findFac(village, need, maxEta, exclude) {
+  var v = vil(village), c = [], r = [];
+  FAC.forEach(function (f) {
+    if (exclude[f.id]) return;
+    var e = eta(v, f), why = [];
+    if (f.vials < MIN_VIALS) why.push("only " + f.vials + " vials");
+    if (!f.doc) why.push("no doctor on duty");
+    if (need === "ventilator" && !f.vent) why.push("no ventilator");
+    if (e > maxEta) why.push(e + " min away");
+    var row = { id: f.id, name: f.name, eta: e, stale: f.age > FRESH_H, why: why.join(", ") };
+    (why.length ? r : c).push(row);
+  });
+  c.sort(function (a, b) { return a.eta - b.eta; });
+  return { cands: c, rejected: r };
+}
+
+// ---------- the agent (same loop as vishraksha/agent.py) ----------
+function Agent(ui, opts) {
+  this.ui = ui; this.need = opts.need || "antivenom"; this.script = opts.script || {}; this.wa = opts.wa || {};
+  this.manual = !!opts.manual; this.clock = 0; this.myRun = opts.run; this.fails = []; this.contacted = 0;
+  this.counts = {}; this.stood = {};
+}
+Agent.prototype.log = function (kind, html) { this.ui.log(this.clock, kind, html); };
+Agent.prototype.wait = function (m) { var self = this; return sleepMin(m, this.myRun).then(function () { self.clock += m; self.ui.tick(self.clock); }); };
+Agent.prototype.nextScript = function (id) {
+  var s = this.script[id]; if (!s) return ["ready", 1.5];
+  var n = this.counts[id] || 0; this.counts[id] = n + 1; return s[Math.min(n, s.length - 1)];
+};
+// One centre: voice call with one retry, then WhatsApp. Resolves {id, answer, after}
+Agent.prototype.contact = function (c) {
+  var self = this, attempt = 0;
+  function tryCall() {
+    attempt++;
+    self.log("TOOL", "<code>ivr_call(" + esc(c.name) + ", eta=" + c.eta + ")</code> attempt " + attempt);
+    var res = self.nextScript(c.id);
+    if (res[0] === "error") {
+      self.log("DECISION", "Voice call to " + esc(c.name) + " failed: <code>503 from voice API</code>.");
+      self.fails.push(c.name + ": voice API error");
+      self.ui.phone(c.id, "no", "API error");
+      if (attempt < 2) return sleepMin(0.3, self.myRun).then(tryCall);
+      self.log("TOOL", "<code>send_whatsapp(" + esc(c.name) + ", buttons=[Ready, Not ready])</code>");
+      self.ui.phone(c.id, "ring", "WhatsApp sent");
+      var w = self.wa[c.id] || ["no_answer"];
+      return self.answer(c, w[0] === "no_answer" ? ["no_answer"] : w, "WhatsApp");
+    }
+    self.ui.phone(c.id, "ring", "Ringing");
+    return self.answer(c, res, "call");
+  }
+  return tryCall();
+};
+Agent.prototype.answer = function (c, res, via) {
+  var self = this, t0 = this.clock;
+  if (self.manual && via === "call") {
+    return self.ui.askHospital(c, self.myRun).then(function (a) { return finish(a.answer, a.after); });
+  }
+  var after = res[0] === "no_answer" ? 2 : res[1];
+  return sleepMin(after, self.myRun).then(function () { return finish(res[0], after); });
+  function finish(ans, after) {
+    if (self.stood[c.id]) return { id: c.id, answer: "stood_down", after: after };
+    var label = { ready: "Pressed 1: READY", not_ready: "Pressed 2: not ready", no_answer: "No answer" }[ans];
+    self.ui.phone(c.id, ans === "ready" ? "ok" : "no", label);
+    self.ui.log(t0 + after, "TOOL", "→ " + esc(c.name) + " (" + via + "): <b>" + label + "</b> after " + after + " min");
+    return { id: c.id, answer: ans, after: after };
+  }
+};
+Agent.prototype.batch = function (batch) {
+  // call in parallel; resolve as soon as one says READY, or when all have answered
+  var self = this, start = this.clock, n = batch.length, done = 0, answers = [], settled = false;
+  return new Promise(function (resolve, reject) {
+    batch.forEach(function (c) {
+      self.contact(c).then(function (a) {
+        answers.push(a); done++;
+        if (settled) return;
+        if (a.answer === "ready") { settled = true; resolve({ win: a, answers: answers }); }
+        else if (done === n) { settled = true; resolve({ win: null, answers: answers }); }
+      }, function (e) { if (!settled) { settled = true; reject(e); } });
+    });
+  }).then(function (r) {
+    var maxAfter = r.win ? r.win.after : Math.max.apply(null, r.answers.map(function (a) { return a.after; }));
+    self.clock = start + maxAfter; self.ui.tick(self.clock);
+    return r;
+  });
+};
+Agent.prototype.run = async function (opts) {
+  var self = this, village = opts.village;
+  this.log("INPUT", opts.note ? "108 call-taker note: <i>\"" + esc(opts.note) + "\"</i>" : "Doctor at " + esc(opts.from) + " pressed <b>Refer</b>: needs a <b>ventilator</b> bed.");
+  if (!village) {
+    var info = parseNote(opts.note);
+    await this.wait(0.3);
+    this.log("UNDERSTAND", "snakebite = <b>" + info.snake + "</b> · village = <b>" + esc(info.village) + "</b> (confidence " + info.conf + ") · bite " + (info.mins == null ? "time unknown" : info.mins + " min ago"));
+    if (!info.snake) { this.log("DECISION", "Not a snakebite. Leave the case to the normal 108 flow."); return { status: "Not snakebite" }; }
+    village = info.village;
+    if (info.conf < 0.9) {
+      this.log("DECISION", "Village match is not certain (" + info.conf + " &lt; 0.9). Confirm before sending anyone.");
+      this.log("TOOL", "<code>confirm_village_with_caller('" + esc(village) + "')</code>: \"Kya aap " + esc(village) + " ke paas hain? 1 dabaiye.\"");
+      await this.wait(1);
+      this.log("VERIFY", "Caller pressed 1: location is <b>" + esc(village) + "</b>.");
+      this.fails.push("unclear location");
+    }
+  }
+  this.ui.setOrigin(village);
+  this.log("PLAN", "1) find centres with a doctor and " + this.need + " within " + TARGET + " min of " + esc(village) + " · 2) call the best 2 in parallel · 3) lock the first YES · 4) send the ambulance · 5) brief the centre · 6) verify arrival. If all say no: widen, then fallback + alert a human.");
+  if (opts.note) this.log("ACTION", "108 ambulance leaves at once. The destination will reach the driver on the way.");
+  var tried = {}, skipped = {}, locked = null, tiers = [TARGET, 90];
+  for (var ti = 0; ti < tiers.length && !locked; ti++) {
+    while (!locked) {
+      var f = findFac(village, this.need, tiers[ti], tried);
+      await this.wait(0.2);
+      this.log("TOOL", "<code>find_facilities(village=" + esc(village) + ", need=" + this.need + ", max_eta=" + tiers[ti] + ")</code> → " + (f.cands.length ? f.cands.map(function (c) { return esc(c.name) + " " + c.eta + "m"; }).join(", ") : "none left"));
+      f.rejected.forEach(function (r) {
+        if (!skipped[r.id] && r.why.indexOf("min away") < 0) { skipped[r.id] = 1; self.log("DECISION", "Skip " + esc(r.name) + ": " + r.why + "."); self.ui.phone(r.id, "no", "Skipped: " + r.why); }
+      });
+      if (!f.cands.length) break;
+      var batch = f.cands.slice(0, 2);
+      batch.forEach(function (c) { if (c.stale) self.log("DECISION", esc(c.name) + " stock data is over 24 h old. Keep it; the call must confirm stock."); });
+      this.ui.calling(batch.map(function (c) { return c.id; }));
+      this.contacted += batch.length;
+      var r = await this.batch(batch);
+      if (r.win) {
+        locked = batch.filter(function (c) { return c.id === r.win.id; })[0];
+        this.log("DECISION", "<b>" + esc(locked.name) + "</b> said READY first. Lock it.");
+        var said = {}; r.answers.forEach(function (a) { said[a.id] = a.answer; });
+        batch.forEach(function (c) { if (c.id !== locked.id && (!said[c.id] || said[c.id] === "ready")) { self.stood[c.id] = 1; if (pendingAsk[c.id]) pendingAsk[c.id]("stood_down"); self.log("ACTION", "Stand-down message to " + esc(c.name) + ": \"Thank you, patient is going elsewhere.\""); self.ui.phone(c.id, "info", "Stood down"); } });
+      } else {
+        r.answers.forEach(function (a) { tried[a.id] = 1; self.fails.push(fac(a.id).name + ": " + a.answer.replace("_", " ")); });
+        this.log("DECISION", "Nobody in this batch is ready. Re-plan with the next centres.");
+      }
+    }
+    if (!locked && ti + 1 < tiers.length) {
+      this.log("ESCALATE", "No ready centre within " + tiers[ti] + " min. <code>alert_human(108 control room)</code>. Widening the search to " + tiers[ti + 1] + " min.");
+    }
+  }
+  if (!locked) {
+    var mc = FAC.filter(function (x) { return x.always; })[0];
+    locked = { id: mc.id, name: mc.name, eta: eta(vil(village), mc) };
+    this.log("ESCALATE", "Every centre declined. Use the pre-agreed fallback <b>" + esc(mc.name) + "</b> and <code>alert_human(District officer)</code>.");
+    this.fails.push("all centres declined");
+    this.ui.phone(mc.id, "ok", "Fallback: always accepts");
+  }
+  var lockAt = this.clock;
+  this.ui.locked(locked);
+  this.log("ACTION", "<code>notify_ambulance</code> → \"Go to " + esc(locked.name) + ". ETA " + locked.eta + " min. Centre confirmed ready.\"");
+  this.log("ACTION", "Pre-arrival note to " + esc(locked.name) + ": " + (opts.note ? "village, bite time, ETA" : "doctor's entries, ETA") + " " + locked.eta + " min.");
+  await this.ui.drive(village, locked, this.myRun);
+  this.clock += locked.eta; this.ui.tick(this.clock);
+  this.log("TOOL", "<code>verify_arrival(" + esc(locked.name) + ")</code>: \"Patient received? 1 dabaiye.\"");
+  this.log("VERIFY", esc(locked.name) + " pressed 1: patient received. Case closed in the log.");
+  return { status: "Closed", dest: locked, lockAt: lockAt, fails: this.fails.length, contacted: this.contacted };
+};
+
+// ---------- LIVE CASE UI ----------
+var manual = false, pendingAsk = {};
+var sel = $("scenario");
+Object.keys(SCEN).forEach(function (k, i) { var o = document.createElement("option"); o.value = k; o.textContent = (i + 1) + ". " + SCEN[k].title; sel.appendChild(o); });
+sel.onchange = function () { $("note").value = SCEN[sel.value].note; resetLive(); };
+$("note").value = SCEN.normal.note;
+$("mode-auto").onclick = function () { manual = false; $("mode-auto").setAttribute("aria-pressed", "true"); $("mode-manual").setAttribute("aria-pressed", "false"); };
+$("mode-manual").onclick = function () { manual = true; $("mode-manual").setAttribute("aria-pressed", "true"); $("mode-auto").setAttribute("aria-pressed", "false"); };
+
+var phoneState = {};
+function renderPhones(origin) {
+  var v = vil(origin || "Rampur");
+  $("phones").innerHTML = FAC.map(function (f) {
+    var st = phoneState[f.id] || { cls: "", label: "Idle" };
+    return '<div class="phone" id="ph-' + f.id + '"><div class="t"><b>' + esc(f.name) + '</b><span class="chip ' + st.cls + '">' + esc(st.label) + '</span></div>' +
+      '<div class="meta">' + f.kind + ' · ' + eta(v, f) + ' min from ' + esc(v.name) + ' · ' + f.vials + ' vials' + (f.age > FRESH_H ? ' · stock ' + f.age + ' h old' : '') + (f.vent ? ' · ventilator' : '') + '</div>' +
+      '<div class="act" id="act-' + f.id + '" hidden><button class="p1" data-id="' + f.id + '" data-a="ready">1 · Ready</button><button class="p2" data-id="' + f.id + '" data-a="not_ready">2 · Not ready</button></div>' +
+      '<div class="timerbar" id="tb-' + f.id + '" hidden><i></i></div></div>';
+  }).join("");
+}
+$("phones").addEventListener("click", function (e) {
+  var b = e.target.closest("button[data-id]"); if (!b) return;
+  var p = pendingAsk[b.dataset.id]; if (p) p(b.dataset.a);
+});
+var mapEls = {};
+var liveUI = {
+  log: function (t, kind, html) { addTrace($("trace"), t, kind, html); },
+  tick: function (t) { $("clock").textContent = clockStr(t); },
+  phone: function (id, cls, label) { phoneState[id] = { cls: cls, label: label }; var el = $("ph-" + id); if (el) el.querySelector(".chip").className = "chip " + cls, el.querySelector(".chip").textContent = label; colorFac(id, cls); },
+  calling: function (ids) { ids.forEach(function (id) { drawLink(id, "ring"); }); },
+  setOrigin: function (v) { originV = v; renderPhones(v); Object.keys(phoneState).forEach(function (id) { liveUI.phone(id, phoneState[id].cls, phoneState[id].label); }); drawMap(); },
+  locked: function (l) { drawLink(l.id, "ok"); $("t-dest").textContent = l.name.replace("Govt ", ""); },
+  askHospital: function (c, myRun) {
+    return new Promise(function (resolve, reject) {
+      var act = $("act-" + c.id), tb = $("tb-" + c.id), start = Date.now(), limit = 2 * MS_PER_MIN * 6; // the judge gets ~8 s per call
+      act.hidden = false; tb.hidden = false;
+      var iv = setInterval(function () {
+        if (!myRun.alive) { cleanup(); reject("cancelled"); return; }
+        var p = (Date.now() - start) / limit; tb.firstChild.style.width = Math.min(100, p * 100) + "%";
+        if (p >= 1) { cleanup(); resolve({ answer: "no_answer", after: 2 }); }
+      }, 100);
+      pendingAsk[c.id] = function (a) { cleanup(); resolve({ answer: a, after: Math.round(((Date.now() - start) / limit) * 2 * 10) / 10 || 0.1 }); };
+      function cleanup() { clearInterval(iv); act.hidden = true; tb.hidden = true; delete pendingAsk[c.id]; }
+    });
+  },
+  drive: function (village, locked, myRun) {
+    var v = vil(village), f = fac(locked.id), steps = 40, i = 0, total = Math.min(6000, locked.eta * 70);
+    return new Promise(function (resolve, reject) {
+      var iv = setInterval(function () {
+        if (!myRun.alive) { clearInterval(iv); reject("cancelled"); return; }
+        i++; var p = i / steps; moveAmb(v.x + (f.x - v.x) * p, v.y + (f.y - v.y) * p);
+        $("clock").textContent = clockStr(liveAgentClock + locked.eta * p);
+        if (i >= steps) { clearInterval(iv); resolve(); }
+      }, total / steps);
+    });
+  }
+};
+var originV = "Rampur", liveAgentClock = 0;
+function clockStr(m) { var base = 23 * 60 + 40 + Math.round(m); var h = Math.floor(base / 60) % 24, mm = base % 60; return (h < 10 ? "0" : "") + h + ":" + (mm < 10 ? "0" : "") + mm + "  (+" + (Math.round(m * 10) / 10) + " min)"; }
+function addTrace(ol, t, kind, html) {
+  var li = document.createElement("li");
+  li.innerHTML = '<span class="tm">' + (t == null ? "" : (Math.round(t * 10) / 10).toFixed(1) + "m") + '</span><span class="k k-' + kind + '">' + kind + '</span><span class="txt">' + html + '</span>';
+  ol.appendChild(li); ol.scrollTop = ol.scrollHeight;
+}
+// map
+var SC = 10, OX = 20, OY = 20;
+function px(x) { return OX + x * SC; } function py(y) { return OY + y * SC; }
+function drawMap() {
+  var svg = $("map"), s = "";
+  s += '<rect x="0" y="0" width="640" height="480" fill="var(--map-bg)"/>';
+  // simple road net between centres and villages
+  var pts = FAC.concat(VILLAGES);
+  for (var i = 0; i < pts.length; i++) for (var j = i + 1; j < pts.length; j++) { var d = Math.hypot(pts[i].x - pts[j].x, pts[i].y - pts[j].y); if (d < 15) s += '<line x1="' + px(pts[i].x) + '" y1="' + py(pts[i].y) + '" x2="' + px(pts[j].x) + '" y2="' + py(pts[j].y) + '" stroke="var(--road)" stroke-width="3" stroke-linecap="round"/>'; }
+  s += '<g id="links"></g>';
+  // 60-minute ring around the origin
+  var o = vil(originV); s += '<circle cx="' + px(o.x) + '" cy="' + py(o.y) + '" r="' + (60 * 35 / 60 / 1.35 * SC) + '" fill="none" stroke="var(--accent)" stroke-dasharray="6 6" stroke-width="1.5"/>';
+  s += '<text x="' + (px(o.x) + 6) + '" y="' + (py(o.y) - 60 * 35 / 60 / 1.35 * SC + 14) + '" font-size="11" fill="var(--accent)" font-family="IBM Plex Mono, monospace">60-min reach</text>';
+  VILLAGES.forEach(function (v) { s += '<circle cx="' + px(v.x) + '" cy="' + py(v.y) + '" r="4" fill="var(--muted)"/><text x="' + px(v.x) + '" y="' + (py(v.y) + 17) + '" text-anchor="middle" font-size="12" font-style="italic" fill="var(--muted)" font-family="IBM Plex Sans, sans-serif">' + v.name + '</text>'; });
+  FAC.forEach(function (f) {
+    s += '<g id="fac-' + f.id + '"><rect x="' + (px(f.x) - 9) + '" y="' + (py(f.y) - 9) + '" width="18" height="18" rx="3" fill="var(--info)"/><text x="' + px(f.x) + '" y="' + (py(f.y) + 3.5) + '" text-anchor="middle" font-size="8" font-weight="700" fill="var(--surface)" font-family="IBM Plex Mono, monospace">' + f.kind + '</text>' +
+      '<text x="' + px(f.x) + '" y="' + (py(f.y) - 14) + '" text-anchor="middle" font-size="11" font-weight="600" fill="var(--ink)" font-family="IBM Plex Sans, sans-serif">' + f.name.replace("Govt ", "") + '</text></g>';
+  });
+  s += '<g id="amb" transform="translate(' + px(o.x) + ',' + py(o.y) + ')"><circle r="11" fill="var(--stop)"/><text y="3.5" text-anchor="middle" font-size="9" font-weight="700" fill="var(--surface)" font-family="IBM Plex Mono, monospace">108</text></g>';
+  svg.innerHTML = s;
+  Object.keys(phoneState).forEach(function (id) { colorFac(id, phoneState[id].cls); });
+}
+function colorFac(id, cls) { if (cls === "no" || cls === "info") { var ln = $("ln-" + id); if (ln) ln.remove(); } var g = $("fac-" + id); if (!g) return; g.querySelector("rect").setAttribute("fill", { ring: "var(--wait)", ok: "var(--go)", no: "var(--stop)", info: "var(--muted)" }[cls] || "var(--info)"); }
+function drawLink(id, cls) {
+  var f = fac(id), o = vil(originV), g = $("links"); if (!g) return;
+  var old = $("ln-" + id); if (old) old.remove();
+  var l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+  l.setAttribute("id", "ln-" + id); l.setAttribute("x1", px(o.x)); l.setAttribute("y1", py(o.y)); l.setAttribute("x2", px(f.x)); l.setAttribute("y2", py(f.y));
+  l.setAttribute("stroke", cls === "ok" ? "var(--go)" : "var(--wait)"); l.setAttribute("stroke-width", cls === "ok" ? 4 : 2); if (cls !== "ok") l.setAttribute("stroke-dasharray", "5 5");
+  g.appendChild(l);
+}
+function moveAmb(x, y) { var a = $("amb"); if (a) a.setAttribute("transform", "translate(" + px(x) + "," + py(y) + ")"); }
+
+function resetLive() {
+  liveTok.alive = false; phoneState = {}; originV = "Rampur"; liveAgentClock = 0;
+  $("trace").innerHTML = ""; renderPhones("Rampur"); drawMap(); $("clock").textContent = clockStr(0);
+  $("t-status").textContent = "Idle"; $("t-dest").textContent = "–"; $("t-lock").textContent = "–"; $("t-fail").textContent = "0";
+  $("start").disabled = false;
+  addTrace($("trace"), null, "INPUT", "Waiting for a 108 call. Pick a scenario and press <b>Start case</b>.");
+}
+$("reset").onclick = resetLive;
+$("start").onclick = function () {
+  resetLive(); $("trace").innerHTML = "";
+  var my = liveTok = { alive: true }, sc = SCEN[sel.value];
+  $("start").disabled = true; $("t-status").textContent = "Running";
+  var ag = new Agent(liveUI, { script: sc.calls, wa: sc.wa, manual: manual, run: my });
+  var origTick = liveUI.tick; liveUI.tick = function (t) { liveAgentClock = t; origTick(t); $("t-fail").textContent = ag.fails.length; };
+  ag.run({ note: $("note").value }).then(function (r) {
+    liveUI.tick = origTick;
+    if (!my.alive) return;
+    $("t-status").textContent = r.status; $("start").disabled = false;
+    if (r.lockAt != null) $("t-lock").textContent = (Math.round(r.lockAt * 10) / 10).toString();
+    $("t-fail").textContent = ag.fails.length;
+  }).catch(function () { liveUI.tick = origTick; });
+};
+$("copy-trace").onclick = function () {
+  var txt = Array.prototype.map.call($("trace").children, function (li) { return li.innerText.replace(/\n/g, "  "); }).join("\n");
+  var b = $("copy-trace");
+  try { navigator.clipboard.writeText(txt).then(function () { b.textContent = "Copied"; }, function () { b.textContent = "Select the trace to copy"; }); } catch (e) { b.textContent = "Select the trace to copy"; }
+  setTimeout(function () { b.textContent = "Copy trace"; }, 2000);
+};
+
+// ---------- BEDSIDE ----------
+var bedHour = 0, entries = { wbct: [], neuro: [] }, rescueStarted = false;
+function renderChecklist() {
+  var due20 = bedHour === 0 || bedHour === 6;
+  var lastNeuro = entries.neuro.length ? entries.neuro[entries.neuro.length - 1].h : -1;
+  var html = "";
+  html += '<div class="ck"><div class="h"><b>20-minute whole blood clotting test (20WBCT)</b><span class="chip ' + (entries.wbct.some(function (e) { return e.h === bedHour; }) ? "ok" : due20 ? "ring" : "") + '">' + (due20 ? "Due now" : "Next at 6 h") + '</span></div>' +
+    '<div class="hint">Protocol: at arrival, then repeat. Doctor records the result they see.</div>' +
+    '<div class="row"><button class="btn ghost" data-w="Clotted">Doctor saw: clotted</button><button class="btn ghost" data-w="Not clotted">Doctor saw: not clotted</button></div>' +
+    '<div class="hint">' + (entries.wbct.map(function (e) { return e.h + " h: " + e.v; }).join(" · ") || "No entry yet") + '</div></div>';
+  html += '<div class="ck"><div class="h"><b>Neuro check: ptosis + single breath count</b><span class="chip ' + (lastNeuro === bedHour ? "ok" : "ring") + '">' + (lastNeuro === bedHour ? "Done this hour" : "Due now (hourly)") + '</span></div>' +
+    '<div class="row"><label class="f" for="ptosis" style="flex:1">Ptosis (doctor)<select id="ptosis"><option>No</option><option>Yes</option></select></label>' +
+    '<label class="f" for="sbc" style="flex:1">Single breath count<input id="sbc" type="number" min="0" max="60" value="' + (entries.neuro.length ? Math.max(4, entries.neuro[entries.neuro.length - 1].sbc - 6) : 32) + '"></label></div>' +
+    '<div class="row"><button class="btn ghost" id="save-neuro">Save entry</button></div>' +
+    '<div class="hint">' + (entries.neuro.map(function (e) { return e.h + " h: ptosis " + e.ptosis + ", SBC " + e.sbc; }).join(" · ") || "No entry yet") + '</div></div>';
+  $("checklist").innerHTML = html;
+  $("bed-clock").textContent = "Since arrival: " + bedHour + " h";
+  drawSBC();
+}
+$("checklist").addEventListener("click", function (e) {
+  var w = e.target.closest("button[data-w]");
+  if (w) { entries.wbct = entries.wbct.filter(function (x) { return x.h !== bedHour; }); entries.wbct.push({ h: bedHour, v: w.dataset.w }); renderChecklist(); return; }
+  if (e.target.id === "save-neuro") {
+    entries.neuro = entries.neuro.filter(function (x) { return x.h !== bedHour; });
+    entries.neuro.push({ h: bedHour, ptosis: $("ptosis").value, sbc: +$("sbc").value || 0 }); renderChecklist();
+  }
+});
+$("bed-advance").onclick = function () {
+  bedHour++; renderChecklist();
+  var due = ["Neuro check due"]; if (bedHour === 6) due.push("repeat 20WBCT due");
+  addTrace($("rescue-trace"), null, "ACTION", "<code>send_whatsapp(duty nurse)</code>: \"" + bedHour + " h since arrival: " + due.join(", ") + ".\"");
+};
+function drawSBC() {
+  var svg = $("sbc-chart"), d = entries.neuro, s = "", W = 420, H = 150, L = 34, R = 10, T = 10, B = 26, maxH = Math.max(6, bedHour);
+  function x(h) { return L + (W - L - R) * h / maxH; } function y(v) { return T + (H - T - B) * (1 - v / 40); }
+  [0, 10, 20, 30, 40].forEach(function (v) { s += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono, monospace">' + v + '</text>'; });
+  for (var h = 0; h <= maxH; h++) s += '<text x="' + x(h) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="var(--muted)" font-family="IBM Plex Mono, monospace">' + h + 'h</text>';
+  if (d.length) {
+    s += '<polyline fill="none" stroke="var(--accent)" stroke-width="2.5" points="' + d.map(function (e) { return x(e.h) + "," + y(Math.min(40, e.sbc)); }).join(" ") + '"/>';
+    d.forEach(function (e) { s += '<circle cx="' + x(e.h) + '" cy="' + y(Math.min(40, e.sbc)) + '" r="4" fill="var(--accent)"/>'; });
+  } else s += '<text x="' + (W / 2) + '" y="' + (H / 2) + '" text-anchor="middle" font-size="12" fill="var(--muted)" font-family="IBM Plex Sans, sans-serif">Save a neuro check to start the chart</text>';
+  svg.innerHTML = s;
+}
+// seed a realistic working state
+entries.wbct.push({ h: 0, v: "Not clotted" }); entries.neuro.push({ h: 0, ptosis: "No", sbc: 32 });
+bedHour = 1; entries.neuro.push({ h: 1, ptosis: "Yes", sbc: 24 });
+renderChecklist();
+
+$("refer").onclick = function () {
+  if (rescueStarted) return; rescueStarted = true; $("refer").disabled = true; var rTok = { alive: true };
+  var ol = $("rescue-trace"); ol.innerHTML = "";
+  var rUI = {
+    log: function (t, k, h) { addTrace(ol, t, k, h); }, tick: function () {}, phone: function () {}, calling: function () {}, setOrigin: function () {},
+    locked: function (l) {
+      var last = entries.neuro[entries.neuro.length - 1] || {};
+      $("handover").textContent =
+        "VISHRAKSHA HANDOVER · CHC Tilda → " + l.name + "\n" +
+        "Patient: Ramu, 34 M · Snakebite, Rampur, 23:20\n" +
+        "Arrived CHC Tilda: 00:22 · Referred at " + bedHour + " h after arrival\n" +
+        "20WBCT (doctor's entries): " + entries.wbct.map(function (e) { return e.h + "h " + e.v; }).join(", ") + "\n" +
+        "Neuro checks (doctor's entries): " + entries.neuro.map(function (e) { return e.h + "h ptosis " + e.ptosis + "/SBC " + e.sbc; }).join(", ") + "\n" +
+        "Treatment given: as written by the doctor in the case sheet (photo attached)\n" +
+        "Referring doctor: Medical Officer, CHC Tilda · ETA " + l.eta + " min by 108";
+      $("handover-wrap").hidden = false;
+    },
+    drive: function () { return sleepMin(2, rTok); }
+  };
+  new Agent(rUI, { need: "ventilator", script: { dh: [["no_answer"]], mc: [["ready", 1.4]] }, run: rTok })
+    .run({ village: "Tilda", from: "CHC Tilda" }).catch(function () {});
+};
+
+// ---------- STOCK ----------
+var stockState = FAC.map(function (f) { return { id: f.id, vials: f.vials, age: f.age, status: "From yesterday" }; });
+function renderStock() {
+  $("stock-table").innerHTML = "<tr><th>Centre</th><th>Vials</th><th>Updated</th><th>Status</th></tr>" + stockState.map(function (s) {
+    var f = fac(s.id), cls = s.vials == null ? "no" : s.vials < MIN_VIALS ? "ring" : "ok";
+    var lab = s.vials == null ? "Unknown" : s.vials < MIN_VIALS ? "Low" : "Ready";
+    return "<tr><td>" + esc(f.name) + "</td><td>" + (s.vials == null ? "?" : s.vials) + "</td><td>" + esc(s.status) + "</td><td><span class='chip " + cls + "'>" + lab + "</span></td></tr>";
+  }).join("");
+}
+renderStock();
+$("run-stock").onclick = async function () {
+  var my = { alive: true }, ol = $("stock-trace"); ol.innerHTML = ""; $("proposal").innerHTML = ""; $("run-stock").disabled = true;
+  var replies = { phc_rampur: null, phc_khedi: "sirf 4 bache hain", chc_tilda: "18", phc_sonpur: null, chc_amlidih: "12 vial", dh: "40", mc: "60 vials" };
+  var keypad = { phc_sonpur: "10", phc_rampur: null };
+  try {
+    addTrace(ol, 0, "PLAN", "Ask all 7 centres for today's vial count. No reply in 30 min → voice call. Still nothing → mark unknown and alert the Block officer. Low stock → propose a transfer for approval.");
+    for (var i = 0; i < FAC.length; i++) {
+      var f = FAC[i], st = stockState[i];
+      await sleepMin(0.6, my);
+      addTrace(ol, 0, "TOOL", "<code>send_whatsapp(" + esc(f.name) + ")</code>: \"Aaj antivenom ki kitni vial hain?\"");
+      var txt = replies[f.id], n = txt ? +(txt.match(/\d+/) || [NaN])[0] : NaN;
+      if (txt) addTrace(ol, 0, "UNDERSTAND", esc(f.name) + " replied <i>\"" + esc(txt) + "\"</i> → <b>" + n + " vials</b>");
+      if (!txt) {
+        addTrace(ol, 30, "DECISION", esc(f.name) + ": no reply in 30 min. Calling the duty number.");
+        await sleepMin(0.6, my);
+        addTrace(ol, 30, "TOOL", "<code>ivr_call(" + esc(f.name) + ", 'Enter vial count on keypad')</code>");
+        var k = keypad[f.id];
+        if (k) { n = +k; addTrace(ol, 31, "UNDERSTAND", esc(f.name) + " entered <b>" + n + "</b> on the keypad."); }
+        else { n = NaN; addTrace(ol, 32, "ESCALATE", esc(f.name) + ": no answer. Stock marked <b>UNKNOWN</b>; <code>alert_human(Block officer)</code>. The Reach agent will confirm stock on every call tonight."); }
+      }
+      st.vials = isNaN(n) ? null : n; st.age = 0; st.status = isNaN(n) ? "No reply today" : "Today 08:" + (txt ? "0" + (2 + i) : "3" + i);
+      renderStock();
+    }
+    var low = stockState.filter(function (s) { return s.vials != null && s.vials < MIN_VIALS; })[0];
+    if (low) {
+      var lf = fac(low.id), qty = MIN_VIALS - low.vials + 5;
+      addTrace(ol, 33, "PLAN", esc(lf.name) + " has " + low.vials + " vials (below the starting dose of " + MIN_VIALS + "). Nearest centre with a surplus: District Hospital (40). Propose moving " + qty + " vials. <b>Needs approval.</b>");
+      $("proposal").innerHTML = '<div class="ck"><div class="h"><b>Transfer proposal · needs District store officer approval</b><span class="chip ring">Waiting</span></div>' +
+        '<div>Move <b>' + qty + ' vials</b> from District Hospital to <b>' + esc(lf.name) + '</b> before the weekend. Reason: ' + low.vials + ' vials left, monsoon peak.</div>' +
+        '<div class="row"><button class="btn go" id="approve">Approve</button><button class="btn ghost" id="reject">Reject</button></div></div>';
+      $("approve").onclick = function () {
+        addTrace(ol, 34, "ACTION", "Officer approved. <code>create_transfer(DVDMS, " + qty + " vials, DH → " + esc(lf.name) + ")</code> (simulated).");
+        addTrace(ol, 34, "VERIFY", "Tomorrow's 8 AM check-in will confirm " + esc(lf.name) + " received the vials; if not, the officer is reminded.");
+        $("proposal").querySelector(".chip").className = "chip ok"; $("proposal").querySelector(".chip").textContent = "Approved";
+        $("approve").disabled = $("reject").disabled = true;
+      };
+      $("reject").onclick = function () {
+        addTrace(ol, 34, "DECISION", "Officer rejected. No transfer. " + esc(lf.name) + " stays marked Low, so the Reach agent will skip it at night.");
+        $("proposal").querySelector(".chip").className = "chip no"; $("proposal").querySelector(".chip").textContent = "Rejected";
+        $("approve").disabled = $("reject").disabled = true;
+      };
+    }
+  } catch (e) { }
+  $("run-stock").disabled = false;
+};
+
+// ---------- IMPACT ----------
+var SIM = [
+  { k: "Reached a ready centre within 60 min", today: 64, vr: 92, unit: "%", max: 100 },
+  { k: "Ready centre at the first stop", today: 49, vr: 95, unit: "%", max: 100 },
+  { k: "Median minutes to a ready centre", today: 38, vr: 26, unit: " min", max: 160, low: true },
+  { k: "Slowest 10% (90th percentile), minutes", today: 159, vr: 57, unit: " min", max: 160, low: true }
+];
+$("bars").innerHTML = SIM.map(function (m) {
+  function bar(lab, v, col) { return '<div class="bar"><span>' + lab + '</span><div class="track"><div class="fill" style="width:' + (100 * v / m.max) + '%;background:' + col + '"></div></div><span class="num">' + v + m.unit + '</span></div>'; }
+  return '<div class="bar-row"><div class="lab"><b>' + m.k + '</b><span class="hint">' + (m.low ? "lower is better" : "higher is better") + '</span></div>' + bar("Today", m.today, "var(--muted)") + bar("VishRaksha", m.vr, "var(--go)") + '</div>';
+}).join("");
+
+// ---------- tabs ----------
+var TABS = ["live", "bedside", "stock", "impact", "how"];
+function show(t) {
+  if (TABS.indexOf(t) < 0) t = "live";
+  TABS.forEach(function (x) { $("view-" + x).hidden = x !== t; $("tab-" + x).setAttribute("aria-selected", x === t ? "true" : "false"); });
+}
+document.querySelectorAll("nav.tabs button").forEach(function (b) { b.onclick = function () { show(b.dataset.tab); try { history.replaceState(null, "", "#" + b.dataset.tab); } catch (e) {} }; });
+show((location.hash || "").replace("#", ""));
+resetLive();
+})();
+</script>
+
+</body>
+</html>

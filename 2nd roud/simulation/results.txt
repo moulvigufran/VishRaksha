@@ -1,0 +1,6 @@
+10000 simulated monsoon snakebites, seed 7
+metric                               today  VishRaksha
+median_min                              38          26
+p90_min                                159          57
+within_60_pct                           64          92
+ready_at_first_stop_pct                 49          95
